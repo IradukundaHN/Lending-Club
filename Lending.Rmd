@@ -1,0 +1,120 @@
+---
+output: 
+  html_document:
+    keep_md: true
+---
+
+```{r}
+
+#import necessary libraries
+library(tidyverse)
+library(caret)
+library(psych)
+library(mlbench)
+library(e1071)
+library(datasets)
+
+#Set the working directory
+setwd("/DataSets")
+
+#load the Lending club file
+load("LendingClub")
+
+#view the data
+View(LendingClub)
+
+# Generate a sample of 1000 each
+LendingClub1 = LendingClub #a copy of dataset
+LendingClub = rbind(sample_n(filter(LendingClub1, loan_default==1), 1000), sample_n(filter(LendingClub1, loan_default==0), 1000))
+
+## Descriptive statistics 
+
+describe(LendingClub)
+
+```
+
+
+```{r}
+# Know the data Types of the variables used in the Lending Club data
+sapply(LendingClub, class)
+```
+
+```{r}
+
+## Data exploratory analysis
+
+#Factor for the categorical variables
+LendingClub$loan_default = factor(LendingClub$loan_default) #0 as Non-defaulted,1 as Defaulted
+LendingClub$residence_property = factor(LendingClub$residence_property) #Rent or Own
+
+# The distribution of residence property by loan default
+ggplot(data = LendingClub, mapping = aes(x = residence_property)) +
+  geom_bar(aes(fill = loan_default), color = "white") +
+  facet_wrap(~loan_default, nrow = 1) +
+  labs(title = "Distribution of residence property by loan default",
+       x = "Residence property",
+       y = "Count") +
+  theme_light()
+
+```
+
+Based on a sample of 1000, among people who were not defaulted, the number for those who own residence properties is greater than the number of those who rent properties.
+And among those who were defaulted, the number of those who rent properties is slightly higher than those who own properties.
+
+
+```{r}
+
+## Logistic regression model 
+
+# Separate the test and Training data
+TrainIndex = sample(1:nrow(LendingClub), round(0.7*nrow(LendingClub)))
+LendingClubTrain = LendingClub[TrainIndex, ] 
+LendingClubTest = LendingClub[-TrainIndex, ]
+
+# Predict the loan default based on Lending Club training dataset
+LendingClubLogit = glm(loan_default ~ .,
+                 data = LendingClubTrain,
+                 family = "binomial")
+
+#summary of the results of the model
+summary(LendingClubLogit)
+
+# predict the loan default based on the LendingClub test data, and the confusion matrix 
+LendingClubTest = LendingClubTest %>% mutate(EstimatedProb = predict(LendingClubLogit,newdata = LendingClubTest,type = "response"))
+# predict Y = 1 if P(Y = 1) > 0.6
+LendingClubTest = LendingClubTest %>% mutate(LendingClubLogitPred = I(EstimatedProb > 0.6) %>% as.numeric())
+LendingClubTable = table(LendingClubTest$LendingClubLogitPred ,LendingClubTest$loan_default)
+
+# confusion matrix using tables
+confusionMatrix(LendingClubTable)
+
+```
+
+
+
+```{r}
+
+## Naïve Bayes model model
+
+#Choose 75% of the sample size
+smp_size <- floor(0.75 * nrow(LendingClub))
+
+# set the seed to make your partition reproducible
+set.seed(123)
+
+#separate the test and training data
+LendingClubtrain_ind <- sample(seq_len(nrow(LendingClub)), size = smp_size)
+LendingClubtrain <- LendingClub[LendingClubtrain_ind, ]
+test <- LendingClub[-LendingClubtrain_ind, ]
+
+#Perform Naïve Bayes model using the training dataset
+NVmodel <- naiveBayes(loan_default ~ .,
+                      data = LendingClubtrain)
+
+# predict the loan default based on the LendingClub test dataset, and the confusion matrix 
+preds <- predict(NVmodel, newdata = test)
+conf_matrix <- table(preds, test$loan_default)
+NVmodel$tables
+
+```
+
